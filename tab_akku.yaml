@@ -28,6 +28,18 @@ wifi:
 
 captive_portal:
 
+number:
+  - platform: template
+    name: "TAB BMS Update Interval"
+    id: update_interval_sec
+    min_value: 1
+    max_value: 300
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 10
+    unit_of_measurement: "s"
+
 sensor:
   # System totals
   - platform: template
@@ -405,6 +417,10 @@ text_sensor:
     id: tab_m2_mode
 
 globals:
+  - id: last_poll
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
   - id: m1_current_a
     type: float
     restore_value: no
@@ -764,43 +780,58 @@ canbus:
               }
 
 interval:
-  - interval: 10s
+  - interval: 1s
     then:
-      # Master / Node 1 main info 0x1F06
-      - canbus.send:
-          can_id: 0x601
-          data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
-      - delay: 20ms
-      - canbus.send:
-          can_id: 0x601
-          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-      - delay: 300ms
+      - if:
+          condition:
+            lambda: |-
+              uint32_t now = millis();
+              float interval_state = id(update_interval_sec).state;
+              if (isnan(interval_state) || interval_state < 1.0f) interval_state = 10.0f;
+              if (interval_state > 300.0f) interval_state = 300.0f;
 
-      # Master / Node 1 cells/details 0x1F03
-      - canbus.send:
-          can_id: 0x601
-          data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
-      - delay: 20ms
-      - canbus.send:
-          can_id: 0x601
-          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-      - delay: 500ms
+              if ((now - id(last_poll)) >= ((uint32_t)interval_state * 1000UL)) {
+                id(last_poll) = now;
+                return true;
+              }
 
-      # Slave 1 / Node 2 main info 0x1F06
-      - canbus.send:
-          can_id: 0x602
-          data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
-      - delay: 20ms
-      - canbus.send:
-          can_id: 0x602
-          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-      - delay: 300ms
+              return false;
+          then:
+            # Master / Node 1 main info 0x1F06
+            - canbus.send:
+                can_id: 0x601
+                data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
+            - delay: 20ms
+            - canbus.send:
+                can_id: 0x601
+                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            - delay: 300ms
 
-      # Slave 1 / Node 2 cells/details 0x1F03
-      - canbus.send:
-          can_id: 0x602
-          data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
-      - delay: 20ms
-      - canbus.send:
-          can_id: 0x602
-          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            # Master / Node 1 cells/details 0x1F03
+            - canbus.send:
+                can_id: 0x601
+                data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
+            - delay: 20ms
+            - canbus.send:
+                can_id: 0x601
+                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            - delay: 500ms
+
+            # Slave 1 / Node 2 main info 0x1F06
+            - canbus.send:
+                can_id: 0x602
+                data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
+            - delay: 20ms
+            - canbus.send:
+                can_id: 0x602
+                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            - delay: 300ms
+
+            # Slave 1 / Node 2 cells/details 0x1F03
+            - canbus.send:
+                can_id: 0x602
+                data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
+            - delay: 20ms
+            - canbus.send:
+                can_id: 0x602
+                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
