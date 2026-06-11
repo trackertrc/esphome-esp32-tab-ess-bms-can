@@ -1,0 +1,806 @@
+substitutions:
+  name: esp32-bms-can
+  friendly_name: ESP32 TAB ESS CAN
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+
+api:
+
+ota:
+  platform: esphome
+
+wifi:
+  ssid: !secret wifiiotssid
+  password: !secret wifipassword
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: "12345678"
+
+captive_portal:
+
+sensor:
+  # System totals
+  - platform: template
+    name: "TAB System Current"
+    id: tab_system_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+  - platform: template
+    name: "TAB System Power"
+    id: tab_system_power
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB System Max Charge Current"
+    id: tab_system_max_charge_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB System Max Discharge Current"
+    id: tab_system_max_discharge_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 0
+
+  # Master main info
+  - platform: template
+    name: "TAB Master ACCU Voltage"
+    id: tab_m1_accu_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+  - platform: template
+    name: "TAB Master PACK Voltage"
+    id: tab_m1_pack_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+  - platform: template
+    name: "TAB Master PACK Current"
+    id: tab_m1_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+  - platform: template
+    name: "TAB Master Module Power"
+    id: tab_m1_power
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master SOC"
+    id: tab_m1_soc
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Master SOH"
+    id: tab_m1_soh
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Master Max Discharge Current"
+    id: tab_m1_max_discharge_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Master Max Charge Current"
+    id: tab_m1_max_charge_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Master Balance HEX"
+    id: tab_m1_balance_hex
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Master Temp 1"
+    id: tab_m1_temp_1
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master Temp 2"
+    id: tab_m1_temp_2
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master Temp 3"
+    id: tab_m1_temp_3
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master Temp 4"
+    id: tab_m1_temp_4
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master Temp Average"
+    id: tab_m1_temp_avg
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master Temp FET 1"
+    id: tab_m1_temp_fet_1
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master Temp FET 2"
+    id: tab_m1_temp_fet_2
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Master Temp FET 3"
+    id: tab_m1_temp_fet_3
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+
+  # Master cells
+  - platform: template
+    name: "TAB Master Cell 01"
+    id: tab_m1_cell_01
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 02"
+    id: tab_m1_cell_02
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 03"
+    id: tab_m1_cell_03
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 04"
+    id: tab_m1_cell_04
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 05"
+    id: tab_m1_cell_05
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 06"
+    id: tab_m1_cell_06
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 07"
+    id: tab_m1_cell_07
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 08"
+    id: tab_m1_cell_08
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 09"
+    id: tab_m1_cell_09
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 10"
+    id: tab_m1_cell_10
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 11"
+    id: tab_m1_cell_11
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 12"
+    id: tab_m1_cell_12
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 13"
+    id: tab_m1_cell_13
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 14"
+    id: tab_m1_cell_14
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 15"
+    id: tab_m1_cell_15
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Master Cell 16"
+    id: tab_m1_cell_16
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+
+  # Slave 1 main info
+  - platform: template
+    name: "TAB Slave 1 ACCU Voltage"
+    id: tab_m2_accu_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+  - platform: template
+    name: "TAB Slave 1 PACK Voltage"
+    id: tab_m2_pack_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+  - platform: template
+    name: "TAB Slave 1 PACK Current"
+    id: tab_m2_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+  - platform: template
+    name: "TAB Slave 1 Module Power"
+    id: tab_m2_power
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 SOC"
+    id: tab_m2_soc
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Slave 1 SOH"
+    id: tab_m2_soh
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Slave 1 Max Discharge Current"
+    id: tab_m2_max_discharge_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Slave 1 Max Charge Current"
+    id: tab_m2_max_charge_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Slave 1 Balance HEX"
+    id: tab_m2_balance_hex
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Slave 1 Temp 1"
+    id: tab_m2_temp_1
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 Temp 2"
+    id: tab_m2_temp_2
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 Temp 3"
+    id: tab_m2_temp_3
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 Temp 4"
+    id: tab_m2_temp_4
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 Temp Average"
+    id: tab_m2_temp_avg
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 Temp FET 1"
+    id: tab_m2_temp_fet_1
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 Temp FET 2"
+    id: tab_m2_temp_fet_2
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: template
+    name: "TAB Slave 1 Temp FET 3"
+    id: tab_m2_temp_fet_3
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+
+  # Slave 1 cells
+  - platform: template
+    name: "TAB Slave 1 Cell 01"
+    id: tab_m2_cell_01
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 02"
+    id: tab_m2_cell_02
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 03"
+    id: tab_m2_cell_03
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 04"
+    id: tab_m2_cell_04
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 05"
+    id: tab_m2_cell_05
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 06"
+    id: tab_m2_cell_06
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 07"
+    id: tab_m2_cell_07
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 08"
+    id: tab_m2_cell_08
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 09"
+    id: tab_m2_cell_09
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 10"
+    id: tab_m2_cell_10
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 11"
+    id: tab_m2_cell_11
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 12"
+    id: tab_m2_cell_12
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 13"
+    id: tab_m2_cell_13
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 14"
+    id: tab_m2_cell_14
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 15"
+    id: tab_m2_cell_15
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+  - platform: template
+    name: "TAB Slave 1 Cell 16"
+    id: tab_m2_cell_16
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+
+text_sensor:
+#  - platform: template
+#    name: "TAB BMS Last Frame"
+#    id: tab_last_frame
+  - platform: template
+    name: "TAB Master State"
+    id: tab_m1_state
+  - platform: template
+    name: "TAB Slave 1 State"
+    id: tab_m2_state
+  - platform: template
+    name: "TAB Master Mode"
+    id: tab_m1_mode
+  - platform: template
+    name: "TAB Slave 1 Mode"
+    id: tab_m2_mode
+
+globals:
+  - id: m1_current_a
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: m2_current_a
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: m1_power_w
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: m2_power_w
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: system_current_a
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: system_power_w
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: m1_max_charge_a
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: m2_max_charge_a
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: m1_max_discharge_a
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: m2_max_discharge_a
+    type: float
+    restore_value: no
+    initial_value: '0'
+
+canbus:
+  - platform: esp32_can
+    id: can0
+    can_id: 0x000
+    tx_pin: GPIO17
+    rx_pin: GPIO16
+    bit_rate: 500kbps
+    mode: NORMAL
+    rx_queue_len: 256
+
+    on_frame:
+      - can_id: 0x581
+        then:
+          - lambda: |-
+              static uint8_t buf[256];
+              static uint8_t resp_type = 0;
+              if (x.size() < 8) return;
+
+              // Response header: C6 50 1F xx ... where xx is the TAB data block
+              if (x[0] == 0xC6 && x[1] == 0x50 && x[2] == 0x1F) {
+                resp_type = x[3];
+                memset(buf, 0, sizeof(buf));
+                return;
+              }
+
+              uint8_t seq = x[0];
+              uint8_t clean_seq = seq & 0x7F;
+              if (clean_seq >= 0x01 && clean_seq <= 0x22) {
+                int off = (clean_seq - 1) * 7;
+                for (int i = 1; i < 8; i++) {
+                  if (off + i - 1 < 256) buf[off + i - 1] = x[i];
+                }
+              }
+
+              // 0x1F06 = main info block: SOC/SOH/ACCU voltage/current/max currents
+              if (resp_type == 0x06 && (seq & 0x80)) {
+                float soc = 0.0f;
+                float soh = 0.0f;
+                float accu_v_raw = 0.0f;
+                float current_raw = 0.0f;
+
+                memcpy(&soc, &buf[8], 4);          // e.g. 34.0
+                memcpy(&soh, &buf[12], 4);         // e.g. 100.0
+                memcpy(&accu_v_raw, &buf[18], 4);  // e.g. 5248.0 = 52.48 V
+                memcpy(&current_raw, &buf[22], 4); // e.g. -2.7 = -0.27 A
+
+                float accu_v = accu_v_raw / 100.0f;
+                float current_a = current_raw / 10.0f;
+                float power_w = accu_v * current_a;
+                id(system_current_a) = current_a;
+                id(system_power_w) = power_w;
+
+                float sys_max_charge_a = ((uint16_t)buf[2] | ((uint16_t)buf[3] << 8)) / 10.0f;
+                float sys_max_discharge_a = ((uint16_t)buf[4] | ((uint16_t)buf[5] << 8)) / 10.0f;
+
+                // Ignore occasional incomplete/zero 0x1F06 packets so they do not overwrite valid values.
+                bool master_main_ok = (soc > 0 && soc <= 100 && soh > 0 && soh <= 100 &&
+                                       accu_v > 40.0f && accu_v < 60.0f &&
+                                       current_a > -300.0f && current_a < 300.0f);
+                if (!master_main_ok) {
+                  ESP_LOGI("tab_bms", "Master main ignored: SOC=%.0f SOH=%.0f ACCU=%.2fV I=%.2fA P=%.1fW", soc, soh, accu_v, current_a, power_w);
+                  return;
+                }
+
+                // Master SOC/SOH are published from the 0x1F03 detail block, because it matches
+                // the TAB program's per-module SOC. 0x1F06 can be a system/rounded value.
+                if (accu_v > 40 && accu_v < 60) id(tab_m1_accu_voltage).publish_state(accu_v);
+
+                // TAB 0x1F06 on Node 1 gives stack/system current and limits.
+                // Do not split it into modules here; exact per-module values are read from each module's 0x1F03 detail block.
+                id(tab_system_current).publish_state(current_a);
+                id(tab_system_power).publish_state(power_w);
+                if (sys_max_charge_a > 0 && sys_max_charge_a < 500) id(tab_system_max_charge_current).publish_state(sys_max_charge_a);
+                if (sys_max_discharge_a > 0 && sys_max_discharge_a < 500) id(tab_system_max_discharge_current).publish_state(sys_max_discharge_a);
+
+                id(tab_m1_state).publish_state("ACTIVE");
+                id(tab_m1_mode).publish_state(current_a < -0.05f ? "discharge mode" : (current_a > 0.05f ? "charge mode" : "stand-by mode"));
+                id(tab_m2_mode).publish_state(current_a < -0.05f ? "discharge mode" : (current_a > 0.05f ? "charge mode" : "stand-by mode"));
+                id(tab_m2_state).publish_state("ACTIVE");
+                // id(tab_last_frame).publish_state("Master main updated");
+                ESP_LOGI("tab_bms", "Master main SOC=%.0f SOH=%.0f ACCU=%.2fV I=%.2fA P=%.1fW", soc, soh, accu_v, current_a, power_w);
+              }
+
+              // 0x1F03 = cell, temperatures and detail block
+              if (resp_type == 0x03 && clean_seq == 0x1A) {
+                int cell_base = 59;
+                float cells[16];
+                for (int i = 0; i < 16; i++) cells[i] = (buf[cell_base + i * 2] | (buf[cell_base + i * 2 + 1] << 8)) / 1000.0f;
+                esphome::sensor::Sensor* cell_sensors[16] = { id(tab_m1_cell_01), id(tab_m1_cell_02), id(tab_m1_cell_03), id(tab_m1_cell_04), id(tab_m1_cell_05), id(tab_m1_cell_06), id(tab_m1_cell_07), id(tab_m1_cell_08), id(tab_m1_cell_09), id(tab_m1_cell_10), id(tab_m1_cell_11), id(tab_m1_cell_12), id(tab_m1_cell_13), id(tab_m1_cell_14), id(tab_m1_cell_15), id(tab_m1_cell_16) };
+                float cell_sum_v = 0.0f;
+                bool cells_ok = true;
+                for (int i = 0; i < 16; i++) {
+                  if (cells[i] > 2.0f && cells[i] < 4.2f) {
+                    cell_sensors[i]->publish_state(cells[i]);
+                    cell_sum_v += cells[i];
+                  } else {
+                    cells_ok = false;
+                  }
+                }
+                if (cells_ok && cell_sum_v > 40.0f && cell_sum_v < 60.0f) {
+                  id(tab_m1_accu_voltage).publish_state(cell_sum_v);
+                }
+
+                // Exact Master current is in the 0x1F03 detail block at buf[45..46] as mA.
+                int16_t raw_m1_current_ma = (int16_t)((uint16_t)buf[45] | ((uint16_t)buf[46] << 8));
+                float m1_detail_current_a = raw_m1_current_ma / 1000.0f;
+                if (m1_detail_current_a > -200.0f && m1_detail_current_a < 200.0f) {
+                  id(m1_current_a) = m1_detail_current_a;
+                  id(tab_m1_current).publish_state(m1_detail_current_a);
+                  if (cell_sum_v > 40.0f && cell_sum_v < 60.0f) {
+                    id(m1_power_w) = cell_sum_v * m1_detail_current_a;
+                    id(tab_m1_power).publish_state(id(m1_power_w));
+                  }
+                }
+
+                // Per-module max currents are in the 0x1F03 detail block as mA.
+                // TAB order is: buf[127..130] = max DISCHARGE, buf[131..134] = max CHARGE.
+                uint32_t raw_m1_max_discharge_ma = (uint32_t)buf[127] | ((uint32_t)buf[128] << 8) | ((uint32_t)buf[129] << 16) | ((uint32_t)buf[130] << 24);
+                uint32_t raw_m1_max_charge_ma = (uint32_t)buf[131] | ((uint32_t)buf[132] << 8) | ((uint32_t)buf[133] << 16) | ((uint32_t)buf[134] << 24);
+                float m1_max_charge_detail_a = raw_m1_max_charge_ma / 1000.0f;
+                float m1_max_discharge_detail_a = raw_m1_max_discharge_ma / 1000.0f;
+                if (m1_max_charge_detail_a > 0.0f && m1_max_charge_detail_a < 300.0f) {
+                  id(m1_max_charge_a) = m1_max_charge_detail_a;
+                  id(tab_m1_max_charge_current).publish_state(m1_max_charge_detail_a);
+                }
+                if (m1_max_discharge_detail_a > 0.0f && m1_max_discharge_detail_a < 300.0f) {
+                  id(m1_max_discharge_a) = m1_max_discharge_detail_a;
+                  id(tab_m1_max_discharge_current).publish_state(m1_max_discharge_detail_a);
+                }
+
+                // PACK voltage is at buf[95..96] as mV. buf[94..95] caused random-looking values.
+                float pack_v = (buf[95] | (buf[96] << 8)) / 1000.0f;
+                if (pack_v > 40 && pack_v < 60) id(tab_m1_pack_voltage).publish_state(pack_v);
+
+                id(tab_m1_balance_hex).publish_state(buf[121]);
+                id(tab_m1_temp_1).publish_state((buf[49] | (buf[50] << 8)) / 10.0f);
+                id(tab_m1_temp_2).publish_state((buf[51] | (buf[52] << 8)) / 10.0f);
+                id(tab_m1_temp_3).publish_state((buf[53] | (buf[54] << 8)) / 10.0f);
+                id(tab_m1_temp_4).publish_state((buf[55] | (buf[56] << 8)) / 10.0f);
+                id(tab_m1_temp_avg).publish_state(((buf[49] | (buf[50] << 8)) + (buf[51] | (buf[52] << 8)) + (buf[53] | (buf[54] << 8)) + (buf[55] | (buf[56] << 8))) / 40.0f);
+                id(tab_m1_temp_fet_1).publish_state((buf[103] | (buf[104] << 8)) / 10.0f);
+                id(tab_m1_temp_fet_2).publish_state((buf[105] | (buf[106] << 8)) / 10.0f);
+                id(tab_m1_temp_fet_3).publish_state((buf[107] | (buf[108] << 8)) / 10.0f);
+
+                uint8_t soc1 = buf[109];
+                uint8_t soh1 = buf[113];
+                if (soc1 > 0 && soc1 <= 100) id(tab_m1_soc).publish_state(soc1);
+                if (soh1 > 0 && soh1 <= 100) id(tab_m1_soh).publish_state(soh1);
+
+                // id(tab_last_frame).publish_state("Master cells updated");
+              }
+
+      - can_id: 0x582
+        then:
+          - lambda: |-
+              static uint8_t buf[256];
+              static uint8_t resp_type = 0;
+              if (x.size() < 8) return;
+
+              // Response header: C6 50 1F xx ... where xx is the TAB data block
+              if (x[0] == 0xC6 && x[1] == 0x50 && x[2] == 0x1F) {
+                resp_type = x[3];
+                memset(buf, 0, sizeof(buf));
+                return;
+              }
+
+              uint8_t seq = x[0];
+              uint8_t clean_seq = seq & 0x7F;
+              if (clean_seq >= 0x01 && clean_seq <= 0x22) {
+                int off = (clean_seq - 1) * 7;
+                for (int i = 1; i < 8; i++) {
+                  if (off + i - 1 < 256) buf[off + i - 1] = x[i];
+                }
+              }
+
+              // 0x1F06 = main info block: SOC/SOH/ACCU voltage/current/max currents
+              if (resp_type == 0x06 && (seq & 0x80)) {
+                float soc = 0.0f;
+                float soh = 0.0f;
+                float accu_v_raw = 0.0f;
+                float current_raw = 0.0f;
+
+                memcpy(&soc, &buf[8], 4);          // e.g. 34.0
+                memcpy(&soh, &buf[12], 4);         // e.g. 100.0
+                memcpy(&accu_v_raw, &buf[18], 4);  // e.g. 5248.0 = 52.48 V
+                memcpy(&current_raw, &buf[22], 4); // e.g. -2.7 = -0.27 A
+
+                float accu_v = accu_v_raw / 100.0f;
+                float current_a = current_raw / 10.0f;
+                float power_w = accu_v * current_a;
+
+                float sys_max_charge_a = ((uint16_t)buf[2] | ((uint16_t)buf[3] << 8)) / 10.0f;
+                float sys_max_discharge_a = ((uint16_t)buf[4] | ((uint16_t)buf[5] << 8)) / 10.0f;
+
+                // Some TAB stacks do not return a separate valid 0x1F06 main block for Slave 1.
+                // IMPORTANT: if the Slave main packet is all zeros, ignore the whole packet so it
+                // does not overwrite the valid Slave values that come from the 0x1F03 cell/detail packet.
+                bool slave_main_ok = (soc > 0 && soc <= 100 && soh > 0 && soh <= 100 &&
+                                      accu_v > 40.0f && accu_v < 60.0f &&
+                                      current_a > -300.0f && current_a < 300.0f);
+
+                // Two TAB L5.1 modules in this system: per-module limits are half of system limits.
+                float module_max_charge_a = sys_max_charge_a / 2.0f;
+                float module_max_discharge_a = sys_max_discharge_a / 2.0f;
+
+                if (slave_main_ok) {
+                  id(tab_m2_soc).publish_state(soc);
+                  id(tab_m2_soh).publish_state(soh);
+                  id(tab_m2_accu_voltage).publish_state(accu_v);
+                  id(tab_m2_current).publish_state(current_a);
+                  id(tab_m2_power).publish_state(power_w);
+
+                  if (module_max_charge_a > 0 && module_max_charge_a < 300) id(tab_m2_max_charge_current).publish_state(module_max_charge_a);
+                  if (module_max_discharge_a > 0 && module_max_discharge_a < 300) id(tab_m2_max_discharge_current).publish_state(module_max_discharge_a);
+
+                  id(m2_current_a) = current_a;
+                  id(m2_power_w) = power_w;
+                  id(m2_max_charge_a) = module_max_charge_a;
+                  id(m2_max_discharge_a) = module_max_discharge_a;
+
+                  id(tab_system_current).publish_state(id(m1_current_a) + id(m2_current_a));
+                  id(tab_system_power).publish_state(id(m1_power_w) + id(m2_power_w));
+                  if (sys_max_charge_a > 0 && sys_max_charge_a < 500) id(tab_system_max_charge_current).publish_state(sys_max_charge_a);
+                  if (sys_max_discharge_a > 0 && sys_max_discharge_a < 500) id(tab_system_max_discharge_current).publish_state(sys_max_discharge_a);
+
+                  id(tab_m2_state).publish_state("ACTIVE");
+                  id(tab_m2_mode).publish_state(current_a < -0.05f ? "discharge mode" : (current_a > 0.05f ? "charge mode" : "stand-by mode"));
+                  // id(tab_last_frame).publish_state("Slave 1 main updated");
+                  ESP_LOGI("tab_bms", "Slave 1 main SOC=%.0f SOH=%.0f ACCU=%.2fV I=%.2fA P=%.1fW", soc, soh, accu_v, current_a, power_w);
+                } else {
+                  // Slave 1 does not return a valid 0x1F06 main block on this TAB stack.
+                  // Do not publish zero current/power here; Node 1 0x1F06 updates these using a 50/50 split.
+                  if (!id(tab_m2_state).has_state()) id(tab_m2_state).publish_state("ACTIVE");
+                  if (!id(tab_m2_mode).has_state()) {
+                    id(tab_m2_mode).publish_state(id(m1_current_a) < -0.05f ? "discharge mode" : (id(m1_current_a) > 0.05f ? "charge mode" : "stand-by mode"));
+                  }
+                  ESP_LOGI("tab_bms", "Slave 1 main ignored: SOC=%.0f SOH=%.0f ACCU=%.2fV I=%.2fA P=%.1fW", soc, soh, accu_v, current_a, power_w);
+                }
+              }
+
+              // 0x1F03 = cell, temperatures and detail block
+              if (resp_type == 0x03 && clean_seq == 0x1A) {
+                int cell_base = 59;
+                float cells[16];
+                for (int i = 0; i < 16; i++) cells[i] = (buf[cell_base + i * 2] | (buf[cell_base + i * 2 + 1] << 8)) / 1000.0f;
+                esphome::sensor::Sensor* cell_sensors[16] = { id(tab_m2_cell_01), id(tab_m2_cell_02), id(tab_m2_cell_03), id(tab_m2_cell_04), id(tab_m2_cell_05), id(tab_m2_cell_06), id(tab_m2_cell_07), id(tab_m2_cell_08), id(tab_m2_cell_09), id(tab_m2_cell_10), id(tab_m2_cell_11), id(tab_m2_cell_12), id(tab_m2_cell_13), id(tab_m2_cell_14), id(tab_m2_cell_15), id(tab_m2_cell_16) };
+                float cell_sum_v = 0.0f;
+                bool cells_ok = true;
+                for (int i = 0; i < 16; i++) {
+                  if (cells[i] > 2.0f && cells[i] < 4.2f) {
+                    cell_sensors[i]->publish_state(cells[i]);
+                    cell_sum_v += cells[i];
+                  } else {
+                    cells_ok = false;
+                  }
+                }
+                if (cells_ok && cell_sum_v > 40.0f && cell_sum_v < 60.0f) {
+                  id(tab_m2_accu_voltage).publish_state(cell_sum_v);
+                }
+
+                // Exact Slave 1 current is also in the 0x1F03 detail block at buf[45..46] as mA.
+                // The separate Slave 0x1F06 main block is empty, but 0x1F03 is valid.
+                int16_t raw_m2_current_ma = (int16_t)((uint16_t)buf[45] | ((uint16_t)buf[46] << 8));
+                float m2_detail_current_a = raw_m2_current_ma / 1000.0f;
+                if (m2_detail_current_a > -200.0f && m2_detail_current_a < 200.0f) {
+                  id(m2_current_a) = m2_detail_current_a;
+                  id(tab_m2_current).publish_state(m2_detail_current_a);
+                  if (cell_sum_v > 40.0f && cell_sum_v < 60.0f) {
+                    id(m2_power_w) = cell_sum_v * m2_detail_current_a;
+                    id(tab_m2_power).publish_state(id(m2_power_w));
+                  }
+                  id(tab_system_current).publish_state(id(m1_current_a) + id(m2_current_a));
+                  id(tab_system_power).publish_state(id(m1_power_w) + id(m2_power_w));
+                }
+
+                // Per-module max currents are in the 0x1F03 detail block as mA.
+                // TAB order is: buf[127..130] = max DISCHARGE, buf[131..134] = max CHARGE.
+                uint32_t raw_m2_max_discharge_ma = (uint32_t)buf[127] | ((uint32_t)buf[128] << 8) | ((uint32_t)buf[129] << 16) | ((uint32_t)buf[130] << 24);
+                uint32_t raw_m2_max_charge_ma = (uint32_t)buf[131] | ((uint32_t)buf[132] << 8) | ((uint32_t)buf[133] << 16) | ((uint32_t)buf[134] << 24);
+                float m2_max_charge_detail_a = raw_m2_max_charge_ma / 1000.0f;
+                float m2_max_discharge_detail_a = raw_m2_max_discharge_ma / 1000.0f;
+                if (m2_max_charge_detail_a > 0.0f && m2_max_charge_detail_a < 300.0f) {
+                  id(m2_max_charge_a) = m2_max_charge_detail_a;
+                  id(tab_m2_max_charge_current).publish_state(m2_max_charge_detail_a);
+                }
+                if (m2_max_discharge_detail_a > 0.0f && m2_max_discharge_detail_a < 300.0f) {
+                  id(m2_max_discharge_a) = m2_max_discharge_detail_a;
+                  id(tab_m2_max_discharge_current).publish_state(m2_max_discharge_detail_a);
+                }
+
+                // PACK voltage is at buf[95..96] as mV. buf[94..95] caused random-looking values.
+                float pack_v = (buf[95] | (buf[96] << 8)) / 1000.0f;
+                if (pack_v > 40 && pack_v < 60) id(tab_m2_pack_voltage).publish_state(pack_v);
+
+                id(tab_m2_balance_hex).publish_state(buf[121]);
+                id(tab_m2_temp_1).publish_state((buf[49] | (buf[50] << 8)) / 10.0f);
+                id(tab_m2_temp_2).publish_state((buf[51] | (buf[52] << 8)) / 10.0f);
+                id(tab_m2_temp_3).publish_state((buf[53] | (buf[54] << 8)) / 10.0f);
+                id(tab_m2_temp_4).publish_state((buf[55] | (buf[56] << 8)) / 10.0f);
+                id(tab_m2_temp_avg).publish_state(((buf[49] | (buf[50] << 8)) + (buf[51] | (buf[52] << 8)) + (buf[53] | (buf[54] << 8)) + (buf[55] | (buf[56] << 8))) / 40.0f);
+                id(tab_m2_temp_fet_1).publish_state((buf[103] | (buf[104] << 8)) / 10.0f);
+                id(tab_m2_temp_fet_2).publish_state((buf[105] | (buf[106] << 8)) / 10.0f);
+                id(tab_m2_temp_fet_3).publish_state((buf[107] | (buf[108] << 8)) / 10.0f);
+
+                uint8_t soc2 = buf[109];
+                uint8_t soh2 = buf[113];
+                if (soc2 > 0 && soc2 <= 100) id(tab_m2_soc).publish_state(soc2);
+                if (soh2 > 0 && soh2 <= 100) id(tab_m2_soh).publish_state(soh2);
+
+                // Publish these from the valid Slave 1 cell/detail block too, because Slave 1 main block
+                // is often empty on this TAB stack.
+                id(tab_m2_state).publish_state("ACTIVE");
+                id(tab_m2_mode).publish_state(id(m1_current_a) < -0.05f ? "discharge mode" : (id(m1_current_a) > 0.05f ? "charge mode" : "stand-by mode"));
+                // Current and power are updated from the Node 1 0x1F06 stack-current block.
+                // id(tab_last_frame).publish_state("Slave 1 cells updated");
+              }
+
+interval:
+  - interval: 10s
+    then:
+      # Master / Node 1 main info 0x1F06
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
+      - delay: 20ms
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - delay: 300ms
+
+      # Master / Node 1 cells/details 0x1F03
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
+      - delay: 20ms
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - delay: 500ms
+
+      # Slave 1 / Node 2 main info 0x1F06
+      - canbus.send:
+          can_id: 0x602
+          data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
+      - delay: 20ms
+      - canbus.send:
+          can_id: 0x602
+          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - delay: 300ms
+
+      # Slave 1 / Node 2 cells/details 0x1F03
+      - canbus.send:
+          can_id: 0x602
+          data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
+      - delay: 20ms
+      - canbus.send:
+          can_id: 0x602
+          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
