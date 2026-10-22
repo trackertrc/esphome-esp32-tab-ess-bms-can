@@ -1,3 +1,26 @@
+# Separate Master/Slave runtime: remaining Ah / measured module discharge A.
+# Small discharges down to 0.02 A are supported; charging/standby => unavailable.
+# System runtime: combine both BMS-reported remaining capacities with ESPHome's
+# TAB System Power (CAN-derived: negative = discharge, positive = charge).
+# No Home Assistant sensor import, no extra CAN polling or timers.
+# Runtime is reported only during discharge; charging/idle => unavailable.
+# This is an estimate to 0% (not an ESS minimum SoC cut-off).
+# TAB L5.1 - optimized single polling loop (3 s minimum setting).
+# 0x1F06 Master and 0x1F03 Master/Slave queried sequentially, with response confirmation.
+# IMPORTANT: The 3 s setting is a minimum start-to-start interval. A complete loop
+# with three 1.5 s BMS preparation periods typically takes longer than 3 seconds.
+# If BMS firmware requires longer idle time, increase the pause between requests.
+# Validated: 0x1F03 balance bitmask matches TAB software 5554 / 5550 on both packs.
+# Adds candidate active-error readings plus confirmed balancing indicators.
+# Also publishes the native FET voltage reading (not MOSFET gate state).
+# Diagnostic raw values expose the 64-bit candidate; the mapping is not validated under fault.
+# Stale/missing CAN data is NOT proof of no alarm: see the existing Detail Age sensors.
+# TAB ESS CAN: One automatic schedule for ALL data (system, Master, Slave).
+# Each cycle reads main data 0x1F06 and both battery detail blocks 0x1F03.
+# Each request waits for its validated response; only a brief inter-request gap remains.
+# All CAN requests originate from the single interval-triggered script (no boot / manual CAN polling).
+# Capacity is read from native CAN detail floats; Cycle Count offset 135 is a candidate pending TAB-app comparison.
+# No native BMS uptime sensor: the unavailable placeholders have been removed.
 substitutions:
   name: esp32-bms-can
   friendly_name: ESP32 TAB ESS CAN
@@ -10,7 +33,9 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
-
+    advanced:
+      minimum_chip_revision: "3.1"
+      sram1_as_iram: true
 logger:
   level: INFO
 
@@ -22,25 +47,125 @@ ota:
 wifi:
   ssid: !secret wifiiotssid
   password: !secret wifipassword
-  ap:
-    ssid: "${friendly_name} Fallback"
-    password: "12345678"
 
-captive_portal:
+button:
+  - platform: restart
+    name: "ESP32 Reboot"
+
+switch:
+  # The only polling enable/disable switch.
+  - platform: template
+    name: "TAB Refresh All Details Auto"
+    id: all_detail_auto_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    # A poll starts only when the timer has elapsed after enabling.
+    on_turn_on:
+      - lambda: 'id(last_all_detail_poll) = millis();'
 
 number:
+  # One interval for system info + Master detail + Slave detail.
+  # Minimum start-to-start time, not a guaranteed full scan every 3 seconds.
+  # Three 1.5-second BMS preparation periods alone require 4.5 seconds.
+  # If the set interval is shorter, the running script cannot overlap itself.
   - platform: template
-    name: "TAB BMS Update Interval"
-    id: update_interval_sec
-    min_value: 1
-    max_value: 300
+    name: "TAB Refresh All Details Interval"
+    id: all_detail_update_interval_sec
+    min_value: 3
+    max_value: 86400
     step: 1
     optimistic: true
     restore_value: true
-    initial_value: 10
+    initial_value: 300
     unit_of_measurement: "s"
+    entity_category: config
 
 sensor:
+  # Combined Master + Slave estimated time to 0% at the current discharge rate.
+  # Uses the SAME native CAN value exposed as "TAB System Power" in Home Assistant.
+  # BMS capacities are native CAN values. No HA input, CAN request, or runtime timer.
+  - platform: template
+    name: "TAB System Runtime Remaining Estimated"
+    id: tab_system_runtime_remaining
+    unit_of_measurement: "h"
+    accuracy_decimals: 2
+    state_class: measurement
+    icon: mdi:timer-sand
+    update_interval: never
+    lambda: |-
+      if (!id(tab_system_power).has_state() ||
+          !id(tab_m1_capacity_remaining_estimated).has_state() ||
+          !id(tab_m2_capacity_remaining_estimated).has_state()) return NAN;
+
+      const float power_w = id(tab_system_power).state;
+      const float master_ah = id(tab_m1_capacity_remaining_estimated).state;
+      const float slave_ah = id(tab_m2_capacity_remaining_estimated).state;
+      if (!std::isfinite(power_w) ||
+          !std::isfinite(master_ah) || !std::isfinite(slave_ah) ||
+          master_ah < 0.0f || slave_ah < 0.0f) return NAN;
+
+      // Negative power means discharge. At low load (<10 W), runtime is
+      // deliberately unavailable because the estimate becomes unreliable.
+      if (power_w >= -10.0f) return NAN;
+      constexpr float nominal_voltage_v = 51.2f;
+      const float remaining_wh = (master_ah + slave_ah) * nominal_voltage_v;
+      const float hours = remaining_wh / (-power_w);
+      return std::round(hours * 100.0f) / 100.0f;
+
+  # Diagnostic: confirms that a *valid complete* detail response was parsed.
+  # If Age keeps increasing, the BMS has not returned accepted cell data.
+  - platform: template
+    name: "TAB Master Detail Age"
+    id: tab_master_detail_age
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: |-
+      if (id(last_master_detail_received_ms) == 0) return NAN;
+      return (float)((uint32_t)(millis() - id(last_master_detail_received_ms))) / 1000.0f;
+
+  - platform: template
+    name: "TAB Slave 1 Detail Age"
+    id: tab_slave_detail_age
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: |-
+      if (id(last_slave_detail_received_ms) == 0) return NAN;
+      return (float)((uint32_t)(millis() - id(last_slave_detail_received_ms))) / 1000.0f;
+
+  - platform: template
+    name: "TAB Master Detail Updates Since Boot"
+    id: tab_master_detail_updates
+    entity_category: diagnostic
+    accuracy_decimals: 0
+
+  - platform: template
+    name: "TAB Slave 1 Detail Updates Since Boot"
+    id: tab_slave_detail_updates
+    entity_category: diagnostic
+    accuracy_decimals: 0
+
+  # Voltage measured by TAB BMS at its power FET path. This is NOT a MOSFET ON/OFF flag.
+  # 0x1F03 buf[91..94] as little-endian millivolts, confirmed against TAB diagnostics.
+  - platform: template
+    name: "TAB Master FET Voltage"
+    id: tab_m1_fet_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+    entity_category: diagnostic
+
+  - platform: template
+    name: "TAB Slave 1 FET Voltage"
+    id: tab_m2_fet_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+    entity_category: diagnostic
+
   # System totals
   - platform: template
     name: "TAB System Current"
@@ -52,6 +177,9 @@ sensor:
     id: tab_system_power
     unit_of_measurement: "W"
     accuracy_decimals: 1
+    on_value:
+      then:
+        - component.update: tab_system_runtime_remaining
   - platform: template
     name: "TAB System Max Charge Current"
     id: tab_system_max_charge_current
@@ -103,10 +231,6 @@ sensor:
     name: "TAB Master Max Charge Current"
     id: tab_m1_max_charge_current
     unit_of_measurement: "A"
-    accuracy_decimals: 0
-  - platform: template
-    name: "TAB Master Balance HEX"
-    id: tab_m1_balance_hex
     accuracy_decimals: 0
   - platform: template
     name: "TAB Master Temp 1"
@@ -231,6 +355,64 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 3
 
+  # Per-pack cell statistics and CAN capacity data. BMS uptime is unavailable; time-to-empty estimates are computed separately.
+  - platform: template
+    name: "TAB Master Cell Voltage Max"
+    id: tab_m1_cell_voltage_max
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Master Cell Voltage Min"
+    id: tab_m1_cell_voltage_min
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Master Cell Voltage Max ID"
+    id: tab_m1_cell_voltage_max_id
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Master Cell Voltage Min ID"
+    id: tab_m1_cell_voltage_min_id
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Master Cell Voltage Average"
+    id: tab_m1_cell_voltage_average
+    unit_of_measurement: "V"
+    accuracy_decimals: 4
+    state_class: measurement
+  - platform: template
+    name: "TAB Master Cell Voltage Delta"
+    id: tab_m1_cell_voltage_delta
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Master Capacity Total"
+    id: tab_m1_capacity_total_estimated
+    unit_of_measurement: "Ah"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Master Capacity Remaining"
+    id: tab_m1_capacity_remaining_estimated
+    unit_of_measurement: "Ah"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Master Runtime Remaining Estimated"
+    id: tab_m1_runtime_remaining_estimated
+    unit_of_measurement: "h"
+    accuracy_decimals: 2
+    state_class: measurement
+  - platform: template
+    name: "TAB Master Cycle Count Candidate"
+    id: tab_m1_cycle_count
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+
   # Slave 1 main info
   - platform: template
     name: "TAB Slave 1 ACCU Voltage"
@@ -271,10 +453,6 @@ sensor:
     name: "TAB Slave 1 Max Charge Current"
     id: tab_m2_max_charge_current
     unit_of_measurement: "A"
-    accuracy_decimals: 0
-  - platform: template
-    name: "TAB Slave 1 Balance HEX"
-    id: tab_m2_balance_hex
     accuracy_decimals: 0
   - platform: template
     name: "TAB Slave 1 Temp 1"
@@ -399,10 +577,94 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 3
 
+  # Per-pack cell statistics and CAN capacity data. BMS uptime is unavailable; time-to-empty estimates are computed separately.
+  - platform: template
+    name: "TAB Slave 1 Cell Voltage Max"
+    id: tab_m2_cell_voltage_max
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Slave 1 Cell Voltage Min"
+    id: tab_m2_cell_voltage_min
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Slave 1 Cell Voltage Max ID"
+    id: tab_m2_cell_voltage_max_id
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Slave 1 Cell Voltage Min ID"
+    id: tab_m2_cell_voltage_min_id
+    accuracy_decimals: 0
+  - platform: template
+    name: "TAB Slave 1 Cell Voltage Average"
+    id: tab_m2_cell_voltage_average
+    unit_of_measurement: "V"
+    accuracy_decimals: 4
+    state_class: measurement
+  - platform: template
+    name: "TAB Slave 1 Cell Voltage Delta"
+    id: tab_m2_cell_voltage_delta
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Slave 1 Capacity Total"
+    id: tab_m2_capacity_total_estimated
+    unit_of_measurement: "Ah"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Slave 1 Capacity Remaining"
+    id: tab_m2_capacity_remaining_estimated
+    unit_of_measurement: "Ah"
+    accuracy_decimals: 3
+    state_class: measurement
+  - platform: template
+    name: "TAB Slave 1 Runtime Remaining Estimated"
+    id: tab_m2_runtime_remaining_estimated
+    unit_of_measurement: "h"
+    accuracy_decimals: 2
+    state_class: measurement
+  - platform: template
+    name: "TAB Slave 1 Cycle Count Candidate"
+    id: tab_m2_cycle_count
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+
+# Candidate per-module active error bitfield from 0x1F03, offsets [34..41].
+# Exact bit mapping must still be verified against a non-zero TAB Active errors reading.
+# No extra CAN polling. OFF=0, ON=one or more bits nonzero.
+binary_sensor:
+  - platform: template
+    name: "TAB Master Active Alarm (Experimental)"
+    id: tab_m1_active_alarm
+    device_class: problem
+    entity_category: diagnostic
+
+  - platform: template
+    name: "TAB Slave 1 Active Alarm (Experimental)"
+    id: tab_m2_active_alarm
+    device_class: problem
+    entity_category: diagnostic
+
+  # Validated balancing bitmask at 0x1F03 buf[57..58]: 16 bits, one per cell.
+  # Nonzero 0x5554 and 0x5550 confirmed against TAB Windows program.
+  # The raw mask is also exposed below. No additional CAN polling is added.
+  - platform: template
+    name: "TAB Master Balancer Active"
+    id: tab_m1_balancer_active
+    entity_category: diagnostic
+
+  - platform: template
+    name: "TAB Slave 1 Balancer Active"
+    id: tab_m2_balancer_active
+    entity_category: diagnostic
+
 text_sensor:
-#  - platform: template
-#    name: "TAB BMS Last Frame"
-#    id: tab_last_frame
   - platform: template
     name: "TAB Master State"
     id: tab_m1_state
@@ -416,11 +678,66 @@ text_sensor:
     name: "TAB Slave 1 Mode"
     id: tab_m2_mode
 
+  # Diagnostic: show "BMS OK" for zero; otherwise expose the hexadecimal error bitfield.
+  # Keep existing sensor names and IDs so Home Assistant entity references remain stable.
+  - platform: template
+    name: "TAB Master Active Errors Raw (Experimental)"
+    id: tab_m1_active_errors_raw
+    entity_category: diagnostic
+
+  - platform: template
+    name: "TAB Slave 1 Active Errors Raw (Experimental)"
+    id: tab_m2_active_errors_raw
+    entity_category: diagnostic
+
+  - platform: template
+    name: "TAB Master Balance State Raw"
+    id: tab_m1_balance_state_raw
+    entity_category: diagnostic
+
+  - platform: template
+    name: "TAB Slave 1 Balance State Raw"
+    id: tab_m2_balance_state_raw
+    entity_category: diagnostic
+
 globals:
-  - id: last_poll
+  # Set only after validated response parsing for the respective request.
+  - id: tab_main_response_ok
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: tab_master_response_ok
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: tab_slave_response_ok
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: last_master_detail_received_ms
     type: uint32_t
     restore_value: no
     initial_value: '0'
+  - id: last_slave_detail_received_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: master_detail_update_count
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: slave_detail_update_count
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: last_all_detail_poll
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: can_seen
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   - id: m1_current_a
     type: float
     restore_value: no
@@ -462,6 +779,82 @@ globals:
     restore_value: no
     initial_value: '0'
 
+# Exactly one serialized CAN polling routine. Only the interval below launches it.
+# A4 initiates the TAB block preparation; A3 reads it after the established 1500 ms delay.
+# Rather than waiting 5+15+15 seconds blindly, wait until the valid response is parsed.
+# On timeout, log the missing response and continue with the other module after a short gap.
+# A 5 s timeout prevents a missing main response from blocking Master/Slave readings.
+script:
+  - id: tab_refresh_all
+    mode: single
+    then:
+      - lambda: |-
+          id(last_all_detail_poll) = millis();
+          id(tab_main_response_ok) = false;
+          ESP_LOGI("tab_bms", "Fast refresh: Main -> Master -> Slave 1");
+
+      # 1) Master main/system info
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
+      - delay: 1500ms
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - wait_until:
+          condition:
+            lambda: 'return id(tab_main_response_ok);'
+          timeout: 5s
+      - if:
+          condition:
+            lambda: 'return !id(tab_main_response_ok);'
+          then:
+            - lambda: 'ESP_LOGW("tab_bms", "Main info timeout; retry on next cycle");'
+            - delay: 1000ms
+      - delay: 500ms
+
+      # 2) Master detail / all 16 cell values
+      - lambda: 'id(tab_master_response_ok) = false;'
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
+      - delay: 1500ms
+      - canbus.send:
+          can_id: 0x601
+          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - wait_until:
+          condition:
+            lambda: 'return id(tab_master_response_ok);'
+          timeout: 5s
+      - if:
+          condition:
+            lambda: 'return !id(tab_master_response_ok);'
+          then:
+            - lambda: 'ESP_LOGW("tab_bms", "Master detail timeout; retry on next cycle");'
+            - delay: 1000ms
+      - delay: 500ms
+
+      # 3) Slave 1 detail / all 16 cell values
+      - lambda: 'id(tab_slave_response_ok) = false;'
+      - canbus.send:
+          can_id: 0x602
+          data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
+      - delay: 1500ms
+      - canbus.send:
+          can_id: 0x602
+          data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - wait_until:
+          condition:
+            lambda: 'return id(tab_slave_response_ok);'
+          timeout: 5s
+      - if:
+          condition:
+            lambda: 'return !id(tab_slave_response_ok);'
+          then:
+            - lambda: 'ESP_LOGW("tab_bms", "Slave 1 detail timeout; retry on next cycle");'
+            - delay: 1000ms
+      - lambda: 'ESP_LOGI("tab_bms", "Fast refresh completed: Main, Master, Slave 1");'
+
 canbus:
   - platform: esp32_can
     id: can0
@@ -479,6 +872,7 @@ canbus:
               static uint8_t buf[256];
               static uint8_t resp_type = 0;
               if (x.size() < 8) return;
+              id(can_seen) = true;
 
               // Response header: C6 50 1F xx ... where xx is the TAB data block
               if (x[0] == 0xC6 && x[1] == 0x50 && x[2] == 0x1F) {
@@ -542,6 +936,7 @@ canbus:
                 id(tab_m2_mode).publish_state(current_a < -0.05f ? "discharge mode" : (current_a > 0.05f ? "charge mode" : "stand-by mode"));
                 id(tab_m2_state).publish_state("ACTIVE");
                 // id(tab_last_frame).publish_state("Master main updated");
+                id(tab_main_response_ok) = true;
                 ESP_LOGI("tab_bms", "Master main SOC=%.0f SOH=%.0f ACCU=%.2fV I=%.2fA P=%.1fW", soc, soh, accu_v, current_a, power_w);
               }
 
@@ -562,8 +957,49 @@ canbus:
                   }
                 }
                 if (cells_ok && cell_sum_v > 40.0f && cell_sum_v < 60.0f) {
-                  id(tab_m1_accu_voltage).publish_state(cell_sum_v);
-                }
+                   id(tab_m1_accu_voltage).publish_state(cell_sum_v);
+                   id(last_master_detail_received_ms) = millis();
+                   id(master_detail_update_count)++;
+                   id(tab_master_detail_updates).publish_state(id(master_detail_update_count));
+                   id(tab_master_response_ok) = true;
+                   // Experimental: 64-bit candidate for TAB Active errors in 0x1F03.
+                   // Both bytes and CSV diagnostic are zero under normal conditions.
+                   // Do not treat as a safety-certified alarm until tested with a real fault.
+                   uint64_t active_error_bits = 0ULL;
+                   for (int i = 0; i < 8; i++) {
+                     active_error_bits |= ((uint64_t)buf[34 + i]) << (8 * i);
+                   }
+                   id(tab_m1_active_alarm).publish_state(active_error_bits != 0ULL);
+                   char active_error_hex[19];
+                   snprintf(active_error_hex, sizeof(active_error_hex), "0x%016llX", (unsigned long long)active_error_bits);
+                   id(tab_m1_active_errors_raw).publish_state(active_error_bits == 0ULL ? "BMS OK" : active_error_hex);
+                   if (active_error_bits != 0ULL) {
+                     ESP_LOGW("tab_bms", "Master candidate Active errors = %s", active_error_hex);
+                   }
+
+                   // Confirmed balance bitmap buf[57..58]: observed 0x5554/0x5550
+                   // matched the TAB Windows app during active balancing.
+                   uint16_t balance_mask = (uint16_t)buf[57] | ((uint16_t)buf[58] << 8);
+                   id(tab_m1_balancer_active).publish_state(balance_mask != 0);
+                   char balance_hex[7];
+                   snprintf(balance_hex, sizeof(balance_hex), "0x%04X", (unsigned int)balance_mask);
+                   id(tab_m1_balance_state_raw).publish_state(balance_hex);
+
+                   ESP_LOGI("tab_bms", "Master detail OK: 16 cells, voltage=%.3fV, received=%u", cell_sum_v, (unsigned int)id(master_detail_update_count));
+                   float min_cell = cells[0], max_cell = cells[0];
+                   int min_cell_id = 1, max_cell_id = 1;
+                   for (int i = 1; i < 16; i++) {
+                     if (cells[i] < min_cell) { min_cell = cells[i]; min_cell_id = i + 1; }
+                     if (cells[i] > max_cell) { max_cell = cells[i]; max_cell_id = i + 1; }
+                   }
+                   id(tab_m1_cell_voltage_min).publish_state(min_cell);
+                   id(tab_m1_cell_voltage_max).publish_state(max_cell);
+                   id(tab_m1_cell_voltage_min_id).publish_state(min_cell_id);
+                   id(tab_m1_cell_voltage_max_id).publish_state(max_cell_id);
+                   id(tab_m1_cell_voltage_average).publish_state(cell_sum_v / 16.0f);
+                   // Publish voltage delta in V. The Home Assistant card converts it to mV.
+                   id(tab_m1_cell_voltage_delta).publish_state(max_cell - min_cell);
+                 }
 
                 // Exact Master current is in the 0x1F03 detail block at buf[45..46] as mA.
                 int16_t raw_m1_current_ma = (int16_t)((uint16_t)buf[45] | ((uint16_t)buf[46] << 8));
@@ -596,7 +1032,12 @@ canbus:
                 float pack_v = (buf[95] | (buf[96] << 8)) / 1000.0f;
                 if (pack_v > 40 && pack_v < 60) id(tab_m1_pack_voltage).publish_state(pack_v);
 
-                id(tab_m1_balance_hex).publish_state(buf[121]);
+                // TAB reports Voltage FET in millivolts at buf[91..94].
+                // It measures the voltage drop, NOT separate CHG/DSG MOSFET status bits.
+                uint32_t fet_mv = ((uint32_t)buf[91]) | ((uint32_t)buf[92] << 8) |
+                                  ((uint32_t)buf[93] << 16) | ((uint32_t)buf[94] << 24);
+                if (fet_mv <= 10000) id(tab_m1_fet_voltage).publish_state(fet_mv / 1000.0f);
+
                 id(tab_m1_temp_1).publish_state((buf[49] | (buf[50] << 8)) / 10.0f);
                 id(tab_m1_temp_2).publish_state((buf[51] | (buf[52] << 8)) / 10.0f);
                 id(tab_m1_temp_3).publish_state((buf[53] | (buf[54] << 8)) / 10.0f);
@@ -611,6 +1052,41 @@ canbus:
                 if (soc1 > 0 && soc1 <= 100) id(tab_m1_soc).publish_state(soc1);
                 if (soh1 > 0 && soh1 <= 100) id(tab_m1_soh).publish_state(soh1);
 
+                 // Native TAB 0x1F03 per-module capacities, IEEE754 little-endian, mAh:
+                 // buf[16..19] nominal/design capacity (100000 mAh on these L5.1 modules)
+                 // buf[115..118] remaining capacity; buf[119..122] full-charge capacity.
+                 // Values were decoded from Master+Slave raw CAN dumps on 2026-10-10.
+                 float remaining_capacity_mah = 0.0f;
+                 float full_capacity_mah = 0.0f;
+                 memcpy(&remaining_capacity_mah, &buf[115], sizeof(float));
+                 memcpy(&full_capacity_mah, &buf[119], sizeof(float));
+                 if (std::isfinite(remaining_capacity_mah) && std::isfinite(full_capacity_mah) &&
+                     full_capacity_mah >= 50000.0f && full_capacity_mah <= 150000.0f &&
+                     remaining_capacity_mah >= 0.0f &&
+                     remaining_capacity_mah <= full_capacity_mah * 1.05f) {
+                   const float remaining_ah = remaining_capacity_mah / 1000.0f;
+                   const float total_ah = full_capacity_mah / 1000.0f;
+                   id(tab_m1_capacity_total_estimated).publish_state(total_ah);
+                   id(tab_m1_capacity_remaining_estimated).publish_state(remaining_ah);
+                   // Update the system runtime from new BMS capacity without a CAN poll.
+                   id(tab_system_runtime_remaining).update();
+                   // Module-specific estimated hours to 0% based on its own capacity
+                   // and own CAN current (Ah / A). No HA lookup or extra CAN polling.
+                   // At less than 0.02 A, the estimate is unstable; charging/idle => unknown.
+                   if (std::isfinite(m1_detail_current_a) &&
+                       m1_detail_current_a <= -0.02f && m1_detail_current_a > -200.0f) {
+                     id(tab_m1_runtime_remaining_estimated).publish_state(
+                       std::round((remaining_ah / (-m1_detail_current_a)) * 100.0f) / 100.0f);
+                   } else {
+                     id(tab_m1_runtime_remaining_estimated).publish_state(NAN);
+                   }
+                 }
+
+                 // Candidate cycle counter: buf[135..136] little-endian uint16.
+                 // 52 (Master) and 51 (Slave) in supplied dump. Confirm in TAB application.
+                 uint16_t cycle_candidate = (uint16_t)buf[135] | ((uint16_t)buf[136] << 8);
+                 if (cycle_candidate <= 20000) id(tab_m1_cycle_count).publish_state((float)cycle_candidate);
+
                 // id(tab_last_frame).publish_state("Master cells updated");
               }
 
@@ -620,6 +1096,7 @@ canbus:
               static uint8_t buf[256];
               static uint8_t resp_type = 0;
               if (x.size() < 8) return;
+              id(can_seen) = true;
 
               // Response header: C6 50 1F xx ... where xx is the TAB data block
               if (x[0] == 0xC6 && x[1] == 0x50 && x[2] == 0x1F) {
@@ -719,8 +1196,49 @@ canbus:
                   }
                 }
                 if (cells_ok && cell_sum_v > 40.0f && cell_sum_v < 60.0f) {
-                  id(tab_m2_accu_voltage).publish_state(cell_sum_v);
-                }
+                   id(tab_m2_accu_voltage).publish_state(cell_sum_v);
+                   id(last_slave_detail_received_ms) = millis();
+                   id(slave_detail_update_count)++;
+                   id(tab_slave_detail_updates).publish_state(id(slave_detail_update_count));
+                   id(tab_slave_response_ok) = true;
+                   // Experimental: 64-bit candidate for TAB Active errors in 0x1F03.
+                   // Both bytes and CSV diagnostic are zero under normal conditions.
+                   // Do not treat as a safety-certified alarm until tested with a real fault.
+                   uint64_t active_error_bits = 0ULL;
+                   for (int i = 0; i < 8; i++) {
+                     active_error_bits |= ((uint64_t)buf[34 + i]) << (8 * i);
+                   }
+                   id(tab_m2_active_alarm).publish_state(active_error_bits != 0ULL);
+                   char active_error_hex[19];
+                   snprintf(active_error_hex, sizeof(active_error_hex), "0x%016llX", (unsigned long long)active_error_bits);
+                   id(tab_m2_active_errors_raw).publish_state(active_error_bits == 0ULL ? "BMS OK" : active_error_hex);
+                   if (active_error_bits != 0ULL) {
+                     ESP_LOGW("tab_bms", "Slave 1 candidate Active errors = %s", active_error_hex);
+                   }
+
+                   // Confirmed balance bitmap buf[57..58]: observed 0x5554/0x5550
+                   // matched the TAB Windows app during active balancing.
+                   uint16_t balance_mask = (uint16_t)buf[57] | ((uint16_t)buf[58] << 8);
+                   id(tab_m2_balancer_active).publish_state(balance_mask != 0);
+                   char balance_hex[7];
+                   snprintf(balance_hex, sizeof(balance_hex), "0x%04X", (unsigned int)balance_mask);
+                   id(tab_m2_balance_state_raw).publish_state(balance_hex);
+
+                   ESP_LOGI("tab_bms", "Slave 1 detail OK: 16 cells, voltage=%.3fV, received=%u", cell_sum_v, (unsigned int)id(slave_detail_update_count));
+                   float min_cell = cells[0], max_cell = cells[0];
+                   int min_cell_id = 1, max_cell_id = 1;
+                   for (int i = 1; i < 16; i++) {
+                     if (cells[i] < min_cell) { min_cell = cells[i]; min_cell_id = i + 1; }
+                     if (cells[i] > max_cell) { max_cell = cells[i]; max_cell_id = i + 1; }
+                   }
+                   id(tab_m2_cell_voltage_min).publish_state(min_cell);
+                   id(tab_m2_cell_voltage_max).publish_state(max_cell);
+                   id(tab_m2_cell_voltage_min_id).publish_state(min_cell_id);
+                   id(tab_m2_cell_voltage_max_id).publish_state(max_cell_id);
+                   id(tab_m2_cell_voltage_average).publish_state(cell_sum_v / 16.0f);
+                   // Publish voltage delta in V. The Home Assistant card converts it to mV.
+                   id(tab_m2_cell_voltage_delta).publish_state(max_cell - min_cell);
+                 }
 
                 // Exact Slave 1 current is also in the 0x1F03 detail block at buf[45..46] as mA.
                 // The separate Slave 0x1F06 main block is empty, but 0x1F03 is valid.
@@ -756,7 +1274,12 @@ canbus:
                 float pack_v = (buf[95] | (buf[96] << 8)) / 1000.0f;
                 if (pack_v > 40 && pack_v < 60) id(tab_m2_pack_voltage).publish_state(pack_v);
 
-                id(tab_m2_balance_hex).publish_state(buf[121]);
+                // TAB reports Voltage FET in millivolts at buf[91..94].
+                // It measures the voltage drop, NOT separate CHG/DSG MOSFET status bits.
+                uint32_t fet_mv = ((uint32_t)buf[91]) | ((uint32_t)buf[92] << 8) |
+                                  ((uint32_t)buf[93] << 16) | ((uint32_t)buf[94] << 24);
+                if (fet_mv <= 10000) id(tab_m2_fet_voltage).publish_state(fet_mv / 1000.0f);
+
                 id(tab_m2_temp_1).publish_state((buf[49] | (buf[50] << 8)) / 10.0f);
                 id(tab_m2_temp_2).publish_state((buf[51] | (buf[52] << 8)) / 10.0f);
                 id(tab_m2_temp_3).publish_state((buf[53] | (buf[54] << 8)) / 10.0f);
@@ -771,67 +1294,63 @@ canbus:
                 if (soc2 > 0 && soc2 <= 100) id(tab_m2_soc).publish_state(soc2);
                 if (soh2 > 0 && soh2 <= 100) id(tab_m2_soh).publish_state(soh2);
 
+                 // Native TAB 0x1F03 per-module capacities, IEEE754 little-endian, mAh:
+                 // buf[16..19] nominal/design capacity (100000 mAh on these L5.1 modules)
+                 // buf[115..118] remaining capacity; buf[119..122] full-charge capacity.
+                 // Values were decoded from Master+Slave raw CAN dumps on 2026-10-10.
+                 float remaining_capacity_mah = 0.0f;
+                 float full_capacity_mah = 0.0f;
+                 memcpy(&remaining_capacity_mah, &buf[115], sizeof(float));
+                 memcpy(&full_capacity_mah, &buf[119], sizeof(float));
+                 if (std::isfinite(remaining_capacity_mah) && std::isfinite(full_capacity_mah) &&
+                     full_capacity_mah >= 50000.0f && full_capacity_mah <= 150000.0f &&
+                     remaining_capacity_mah >= 0.0f &&
+                     remaining_capacity_mah <= full_capacity_mah * 1.05f) {
+                   const float remaining_ah = remaining_capacity_mah / 1000.0f;
+                   const float total_ah = full_capacity_mah / 1000.0f;
+                   id(tab_m2_capacity_total_estimated).publish_state(total_ah);
+                   id(tab_m2_capacity_remaining_estimated).publish_state(remaining_ah);
+                   // Update the system runtime from new BMS capacity without a CAN poll.
+                   id(tab_system_runtime_remaining).update();
+                   // Module-specific estimated hours to 0% based on its own capacity
+                   // and own CAN current (Ah / A). No HA lookup or extra CAN polling.
+                   // At less than 0.02 A, the estimate is unstable; charging/idle => unknown.
+                   if (std::isfinite(m2_detail_current_a) &&
+                       m2_detail_current_a <= -0.02f && m2_detail_current_a > -200.0f) {
+                     id(tab_m2_runtime_remaining_estimated).publish_state(
+                       std::round((remaining_ah / (-m2_detail_current_a)) * 100.0f) / 100.0f);
+                   } else {
+                     id(tab_m2_runtime_remaining_estimated).publish_state(NAN);
+                   }
+                 }
+
+                 // Candidate cycle counter: buf[135..136] little-endian uint16.
+                 // 52 (Master) and 51 (Slave) in supplied dump. Confirm in TAB application.
+                 uint16_t cycle_candidate = (uint16_t)buf[135] | ((uint16_t)buf[136] << 8);
+                 if (cycle_candidate <= 20000) id(tab_m2_cycle_count).publish_state((float)cycle_candidate);
+
                 // Publish these from the valid Slave 1 cell/detail block too, because Slave 1 main block
                 // is often empty on this TAB stack.
                 id(tab_m2_state).publish_state("ACTIVE");
-                id(tab_m2_mode).publish_state(id(m1_current_a) < -0.05f ? "discharge mode" : (id(m1_current_a) > 0.05f ? "charge mode" : "stand-by mode"));
+                id(tab_m2_mode).publish_state(id(m2_current_a) < -0.05f ? "discharge mode" : (id(m2_current_a) > 0.05f ? "charge mode" : "stand-by mode"));
                 // Current and power are updated from the Node 1 0x1F06 stack-current block.
                 // id(tab_last_frame).publish_state("Slave 1 cells updated");
               }
 
 interval:
+  # The only CAN polling timer. It triggers the serialized full-refresh script.
+  # Interval measures from the START of the last full refresh. The next scan waits
+  # until the current script exits; setting 3s never overlaps CAN queries.
   - interval: 1s
     then:
       - if:
           condition:
             lambda: |-
+              if (!id(all_detail_auto_enabled).state || id(tab_refresh_all).is_running()) return false;
               uint32_t now = millis();
-              float interval_state = id(update_interval_sec).state;
-              if (isnan(interval_state) || interval_state < 1.0f) interval_state = 10.0f;
-              if (interval_state > 300.0f) interval_state = 300.0f;
-
-              if ((now - id(last_poll)) >= ((uint32_t)interval_state * 1000UL)) {
-                id(last_poll) = now;
-                return true;
-              }
-
-              return false;
+              float seconds = id(all_detail_update_interval_sec).state;
+              if (isnan(seconds) || seconds < 3.0f) seconds = 3.0f;
+              if (seconds > 86400.0f) seconds = 86400.0f;
+              return (uint32_t)(now - id(last_all_detail_poll)) >= (uint32_t)(seconds * 1000.0f);
           then:
-            # Master / Node 1 main info 0x1F06
-            - canbus.send:
-                can_id: 0x601
-                data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
-            - delay: 20ms
-            - canbus.send:
-                can_id: 0x601
-                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-            - delay: 300ms
-
-            # Master / Node 1 cells/details 0x1F03
-            - canbus.send:
-                can_id: 0x601
-                data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
-            - delay: 20ms
-            - canbus.send:
-                can_id: 0x601
-                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-            - delay: 500ms
-
-            # Slave 1 / Node 2 main info 0x1F06
-            - canbus.send:
-                can_id: 0x602
-                data: [0xA4, 0x50, 0x1F, 0x06, 0x5F, 0x0A, 0x00, 0x00]
-            - delay: 20ms
-            - canbus.send:
-                can_id: 0x602
-                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-            - delay: 300ms
-
-            # Slave 1 / Node 2 cells/details 0x1F03
-            - canbus.send:
-                can_id: 0x602
-                data: [0xA4, 0x50, 0x1F, 0x03, 0x5F, 0x0A, 0x00, 0x00]
-            - delay: 20ms
-            - canbus.send:
-                can_id: 0x602
-                data: [0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            - script.execute: tab_refresh_all
